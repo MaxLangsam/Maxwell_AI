@@ -35,6 +35,7 @@ export function useChatSessions() {
           ...session,
           createdAt: new Date(session.createdAt),
           updatedAt: new Date(session.updatedAt),
+          tags: session.tags || [], // Ensure tags exist
         }))
         setSessions(parsedSessions)
 
@@ -173,6 +174,26 @@ export function useChatSessions() {
     return [...new Set(allTags)]
   }, [sessions])
 
+  const getSessionsByTag = useCallback(
+    (tag: string) => {
+      return sessions.filter((session) => session.tags.includes(tag))
+    },
+    [sessions],
+  )
+
+  const searchSessions = useCallback(
+    (query: string) => {
+      const lowercaseQuery = query.toLowerCase()
+      return sessions.filter(
+        (session) =>
+          session.title.toLowerCase().includes(lowercaseQuery) ||
+          session.tags.some((tag) => tag.toLowerCase().includes(lowercaseQuery)) ||
+          session.messages.some((message) => message.content.toLowerCase().includes(lowercaseQuery)),
+      )
+    },
+    [sessions],
+  )
+
   return {
     sessions,
     currentSessionId,
@@ -185,5 +206,7 @@ export function useChatSessions() {
     updateSessionTags,
     getCurrentSession,
     getAllTags,
+    getSessionsByTag,
+    searchSessions,
   }
 }

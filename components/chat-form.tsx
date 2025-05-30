@@ -25,19 +25,36 @@ import { JournalInterface } from "@/components/journal-interface"
 import { SecondBrainInterface } from "@/components/second-brain-interface"
 import { FileUpload } from "@/components/file-upload"
 import { CodeBlock } from "@/components/code-block"
+import { TagManager } from "@/components/tag-manager"
+import { ChatNameEditor } from "@/components/chat-name-editor"
+import { SidebarFilter } from "@/components/sidebar-filter"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import { useSettings } from "@/hooks/use-settings"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 
 interface ChatFormProps extends React.ComponentProps<"form"> {
   onSignOut: () => void
 }
+
+const TAG_COLORS = [
+  "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+  "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+  "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+  "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300",
+  "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300",
+  "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
+]
 
 export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
   const [currentView, setCurrentView] = useState<"chat" | "journal" | "second-brain">("chat")
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedTag, setSelectedTag] = useState("all")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { settings } = useSettings()
   const prevMessagesLengthRef = useRef(0)
@@ -52,10 +69,14 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
     deleteSession,
     updateSessionTitle,
     updateSessionMessages,
+    updateSessionTags,
     getCurrentSession,
+    getAllTags,
+    searchSessions,
   } = useChatSessions()
 
   const currentSession = useMemo(() => getCurrentSession(), [getCurrentSession])
+  const allTags = useMemo(() => getAllTags(), [getAllTags])
 
   const { messages, input, setInput, append, setMessages, isLoading } = useChat({
     api: "/api/chat",
@@ -123,6 +144,28 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
     }
   }, [messages, settings.autoScrollToBottom])
 
+  const getTagColor = (tag: string) => {
+    const index = tag.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    return TAG_COLORS[index % TAG_COLORS.length]
+  }
+
+  // Filter sessions based on search and tag
+  const filteredSessions = useMemo(() => {
+    let filtered = sessions
+
+    // Filter by search term
+    if (searchTerm) {
+      filtered = searchSessions(searchTerm)
+    }
+
+    // Filter by tag
+    if (selectedTag !== "all") {
+      filtered = filtered.filter((session) => session.tags.includes(selectedTag))
+    }
+
+    return filtered
+  }, [sessions, searchTerm, selectedTag, searchSessions])
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!input.trim() && uploadedFiles.length === 0) return
@@ -182,6 +225,20 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
       }
     },
     [deleteSession, currentSessionId, sessions, handleSwitchSession, handleNewSession],
+  )
+
+  const handleUpdateSessionName = useCallback(
+    (sessionId: string, newName: string) => {
+      updateSessionTitle(sessionId, newName)
+    },
+    [updateSessionTitle],
+  )
+
+  const handleUpdateSessionTags = useCallback(
+    (sessionId: string, tags: string[]) => {
+      updateSessionTags(sessionId, tags)
+    },
+    [updateSessionTags],
   )
 
   const handleCopyMessage = async (content: string, messageId: string) => {
@@ -279,7 +336,7 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
   }
 
   const groupedSessions = useMemo(() => {
-    return sessions.reduce(
+    return filteredSessions.reduce(
       (groups, session) => {
         const date = new Date(session.updatedAt)
         const dateStr = formatDate(date)
@@ -289,9 +346,9 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
         groups[dateStr].push(session)
         return groups
       },
-      {} as Record<string, typeof sessions>,
+      {} as Record<string, typeof filteredSessions>,
     )
-  }, [sessions])
+  }, [filteredSessions])
 
   const sortedDates = useMemo(() => {
     return Object.keys(groupedSessions).sort((a, b) => {
@@ -372,6 +429,15 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
             </Button>
           </div>
 
+          {/* Search and Filter */}
+          <SidebarFilter
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            selectedTag={selectedTag}
+            onTagChange={setSelectedTag}
+            allTags={allTags}
+          />
+
           {/* New Chat Button */}
           <div className="p-2">
             <Button
@@ -386,38 +452,74 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
           {/* Chat History */}
           <div className="flex-1 overflow-y-auto">
             <div className="px-2 pb-2">
-              {sortedDates.map((dateStr) => (
-                <div key={dateStr} className="mb-4">
-                  <h3 className="px-3 mb-2 text-xs text-gray-500 dark:text-gray-400 font-medium">{dateStr}</h3>
-                  <div className="space-y-1">
-                    {groupedSessions[dateStr].map((session) => (
-                      <button
-                        key={session.id}
-                        onClick={() => handleSwitchSession(session.id)}
-                        className={cn(
-                          "w-full text-left px-3 py-2 rounded-md text-sm group flex items-center gap-2",
-                          session.id === currentSessionId
-                            ? "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                            : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300",
-                        )}
-                      >
-                        <MessageSquare size={14} className="flex-shrink-0" />
-                        <span className="truncate flex-1">{session.title}</span>
-                        {session.id === currentSessionId && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                            onClick={(e) => handleDeleteSession(session.id, e)}
-                          >
-                            <Trash size={14} />
-                          </Button>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+              {sortedDates.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 text-sm">
+                  {searchTerm || selectedTag !== "all" ? "No chats match your filters" : "No chats yet"}
                 </div>
-              ))}
+              ) : (
+                sortedDates.map((dateStr) => (
+                  <div key={dateStr} className="mb-4">
+                    <h3 className="px-3 mb-2 text-xs text-gray-500 dark:text-gray-400 font-medium">{dateStr}</h3>
+                    <div className="space-y-1">
+                      {groupedSessions[dateStr].map((session) => (
+                        <div
+                          key={session.id}
+                          className={cn(
+                            "rounded-md text-sm group",
+                            session.id === currentSessionId
+                              ? "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                              : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300",
+                          )}
+                        >
+                          <button
+                            onClick={() => handleSwitchSession(session.id)}
+                            className="w-full text-left px-3 py-2 flex items-center gap-2"
+                          >
+                            <MessageSquare size={14} className="flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <ChatNameEditor
+                                currentName={session.title}
+                                onUpdateName={(newName) => handleUpdateSessionName(session.id, newName)}
+                              />
+                              {session.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {session.tags.slice(0, 2).map((tag) => (
+                                    <Badge key={tag} className={`${getTagColor(tag)} text-xs`}>
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                  {session.tags.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{session.tags.length - 2}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                          {session.id === currentSessionId && (
+                            <div className="flex items-center justify-end gap-1 px-3 pb-2">
+                              <TagManager
+                                sessionTags={session.tags}
+                                allTags={allTags}
+                                onUpdateTags={(tags) => handleUpdateSessionTags(session.id, tags)}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                onClick={(e) => handleDeleteSession(session.id, e)}
+                              >
+                                <Trash size={12} />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -434,6 +536,16 @@ export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
               </Button>
             )}
             <h1 className="text-lg font-medium">Maxwell</h1>
+            {currentSession && currentSession.tags.length > 0 && (
+              <div className="flex gap-1">
+                {currentSession.tags.slice(0, 3).map((tag) => (
+                  <Badge key={tag} className={getTagColor(tag)}>
+                    {tag}
+                  </Badge>
+                ))}
+                {currentSession.tags.length > 3 && <Badge variant="outline">+{currentSession.tags.length - 3}</Badge>}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Dialog>
