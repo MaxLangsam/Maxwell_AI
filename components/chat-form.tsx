@@ -1,87 +1,70 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { useChat } from "ai/react"
-import { ArrowUpIcon, MessageSquare, LogOut, AlertCircle, BookOpen, Menu, Copy, Check } from "lucide-react"
+import {
+  ArrowUpIcon,
+  MessageSquare,
+  Plus,
+  Trash,
+  BookOpen,
+  Copy,
+  Check,
+  Menu,
+  Brain,
+  Paperclip,
+  LogOut,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { AutoResizeTextarea } from "@/components/autoresize-textarea"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { SettingsDialog } from "@/components/settings-dialog"
+import { JournalInterface } from "@/components/journal-interface"
+import { SecondBrainInterface } from "@/components/second-brain-interface"
+import { FileUpload } from "@/components/file-upload"
+import { CodeBlock } from "@/components/code-block"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
-import { useAuth } from "@/components/providers/auth-provider"
-import { JournalInterface } from "./journal/journal-interface"
-import { SessionSidebar } from "./session-sidebar"
-import { ThemeToggle } from "./theme-toggle"
-import { FileUpload } from "./file-upload"
-import { InsightsButton } from "./insights/insights-button"
-import { NotesButton } from "./notes/notes-button"
-import { SettingsDialog } from "./settings/settings-dialog"
-import { CodeBlock } from "./code-block"
 import { useSettings } from "@/hooks/use-settings"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
-const MAXWELL_GREETINGS = [
-  "Hello! I'm Maxwell. What's on your mind today?",
-  "Hi there! I'm Maxwell. What's on your mind today?",
-  "Hi there! I'm Maxwell, and I'm here to help. What can we explore together?",
-  "Welcome! I'm Maxwell. What interesting challenge can I help you tackle?",
-  "Hey! Maxwell here. What would you like to dive into today?",
-  "Hello! I'm Maxwell. I'm curious - what brings you here today?",
-]
+interface ChatFormProps extends React.ComponentProps<"form"> {
+  onSignOut: () => void
+}
 
-export function ChatForm() {
-  const [currentGreeting, setCurrentGreeting] = useState("")
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [currentView, setCurrentView] = useState<"chat" | "journal">("chat")
+export function ChatForm({ className, onSignOut, ...props }: ChatFormProps) {
+  const [currentView, setCurrentView] = useState<"chat" | "journal" | "second-brain">("chat")
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { signOut, user } = useAuth()
   const { settings } = useSettings()
+  const prevMessagesLengthRef = useRef(0)
+  const messageUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const {
     sessions,
     currentSessionId,
+    isInitialized,
     createSession,
     switchSession,
     deleteSession,
     updateSessionTitle,
-    updateSessionTags,
-    getCurrentSession,
-    getAllTags,
-    addFileToSession,
     updateSessionMessages,
+    getCurrentSession,
   } = useChatSessions()
 
-  const currentSession = getCurrentSession()
-  const allTags = getAllTags()
+  const currentSession = useMemo(() => getCurrentSession(), [getCurrentSession])
 
-  // Set a random greeting on component mount
-  useEffect(() => {
-    setCurrentGreeting(MAXWELL_GREETINGS[Math.floor(Math.random() * MAXWELL_GREETINGS.length)])
-  }, [])
-
-  const {
-    messages,
-    input,
-    setInput,
-    append,
-    setMessages,
-    isLoading,
-    error: chatError,
-  } = useChat({
+  const { messages, input, setInput, append, setMessages, isLoading } = useChat({
     api: "/api/chat",
     id: currentSessionId,
     initialMessages: currentSession?.messages || [],
-    onError: (error) => {
-      console.error("Chat error:", error)
-      setError("I'm having trouble connecting right now. Please check your internet connection and try again.")
-    },
     onFinish: (message) => {
-      setError(null) // Clear any previous errors on successful response
       // Auto-generate session title from first user message if untitled
       if (currentSession && currentSession.title === "New Chat" && messages.length === 1) {
-        const firstUserMessage = messages[0].content
+        const firstUserMessage = messages[0]?.content
         if (firstUserMessage) {
           const title = firstUserMessage.slice(0, 30) + (firstUserMessage.length > 30 ? "..." : "")
           updateSessionTitle(currentSessionId, title)
@@ -90,28 +73,72 @@ export function ChatForm() {
     },
   })
 
-  // Scroll to bottom when messages change
+  // Debounced message update to prevent excessive state updates
+  const debouncedUpdateMessages = useCallback(
+    (sessionId: string, newMessages: typeof messages) => {
+      if (messageUpdateTimeoutRef.current) {
+        clearTimeout(messageUpdateTimeoutRef.current)
+      }
+
+      messageUpdateTimeoutRef.current = setTimeout(() => {
+        updateSessionMessages(sessionId, newMessages)
+        messageUpdateTimeoutRef.current = null
+      }, 500) // 500ms debounce
+    },
+    [updateSessionMessages],
+  )
+
+  // Sync messages with current session only when messages actually change
   useEffect(() => {
-    if (settings.autoScrollToBottom) {
+    if (!isInitialized || !currentSession) return
+
+    // Only update if the message count has changed
+    if (messages.length !== prevMessagesLengthRef.current) {
+      prevMessagesLengthRef.current = messages.length
+      if (messages.length > 0) {
+        debouncedUpdateMessages(currentSessionId, messages)
+      }
+    }
+
+    return () => {
+      if (messageUpdateTimeoutRef.current) {
+        clearTimeout(messageUpdateTimeoutRef.current)
+      }
+    }
+  }, [messages, currentSessionId, isInitialized, debouncedUpdateMessages, currentSession])
+
+  // Update messages when switching sessions
+  useEffect(() => {
+    if (isInitialized && currentSession) {
+      // Reset the messages length ref
+      prevMessagesLengthRef.current = currentSession.messages.length
+      setMessages(currentSession.messages)
+    }
+  }, [currentSessionId, isInitialized, setMessages, currentSession])
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    if (settings.autoScrollToBottom && messages.length > 0) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }
   }, [messages, settings.autoScrollToBottom])
 
-  // Add this effect after the existing useEffect hooks
-  useEffect(() => {
-    // Sync messages with current session
-    if (currentSession && messages.length > 0) {
-      updateSessionMessages(currentSessionId, messages)
-    }
-  }, [messages, currentSessionId, updateSessionMessages])
-
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if (!input.trim() && uploadedFiles.length === 0) return
+    if (isLoading) return
 
-    setError(null) // Clear any previous errors
-    void append({ content: input, role: "user" })
+    let content = input.trim()
+
+    // Add file information to the message if files are attached
+    if (uploadedFiles.length > 0) {
+      const fileInfo = uploadedFiles.map((file) => `[File: ${file.name} (${file.type})]`).join("\n")
+      content = content ? `${content}\n\n${fileInfo}` : fileInfo
+    }
+
+    void append({ content, role: "user" })
     setInput("")
+    setUploadedFiles([])
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -121,64 +148,41 @@ export function ChatForm() {
     }
   }
 
-  const handleNewSession = () => {
+  const handleFileUpload = (file: File) => {
+    setUploadedFiles((prev) => [...prev, file])
+  }
+
+  const handleNewSession = useCallback(() => {
     const newSessionId = createSession()
     switchSession(newSessionId)
     setMessages([])
-    setError(null)
-  }
+    prevMessagesLengthRef.current = 0
+  }, [createSession, switchSession, setMessages])
 
-  const handleSwitchSession = (sessionId: string) => {
-    switchSession(sessionId)
-    const session = sessions.find((s) => s.id === sessionId)
-    if (session) {
-      setMessages(session.messages || [])
-    } else {
-      setMessages([])
-    }
-    setMobileSidebarOpen(false)
-    setError(null)
-  }
-
-  const handleDeleteSession = (sessionId: string) => {
-    // Fix: Stop event propagation to prevent triggering parent click handlers
-    deleteSession(sessionId)
-    if (sessionId === currentSessionId) {
-      const remainingSessions = sessions.filter((s) => s.id !== sessionId)
-      if (remainingSessions.length > 0) {
-        handleSwitchSession(remainingSessions[0].id)
-      } else {
-        handleNewSession()
+  const handleSwitchSession = useCallback(
+    (sessionId: string) => {
+      if (sessionId !== currentSessionId) {
+        switchSession(sessionId)
       }
-    }
-  }
+    },
+    [currentSessionId, switchSession],
+  )
 
-  const handleFileUpload = async (file: File) => {
-    try {
-      // In a real implementation, you would upload the file to a server
-      // and get back a URL or ID
-      const fileUrl = URL.createObjectURL(file)
-
-      // Add file to the current session
-      addFileToSession(currentSessionId, {
-        id: `file-${Date.now()}`,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        url: fileUrl,
-        uploadedAt: new Date(),
-      })
-
-      // Add a message about the file
-      append({
-        content: `[File uploaded: ${file.name}]`,
-        role: "user",
-      })
-    } catch (error) {
-      console.error("Error uploading file:", error)
-      setError("Failed to upload file. Please try again.")
-    }
-  }
+  const handleDeleteSession = useCallback(
+    (sessionId: string, e: React.MouseEvent) => {
+      e.stopPropagation()
+      deleteSession(sessionId)
+      if (sessionId === currentSessionId) {
+        const remainingSessions = sessions.filter((s) => s.id !== sessionId)
+        if (remainingSessions.length > 0) {
+          handleSwitchSession(remainingSessions[0].id)
+        } else {
+          handleNewSession()
+        }
+      }
+    },
+    [deleteSession, currentSessionId, sessions, handleSwitchSession, handleNewSession],
+  )
 
   const handleCopyMessage = async (content: string, messageId: string) => {
     try {
@@ -190,17 +194,13 @@ export function ChatForm() {
     }
   }
 
-  // Function to parse and render message content with code blocks
   const renderMessageContent = (content: string, messageId: string) => {
-    // Simple regex to detect code blocks (\`\`\`language\ncode\`\`\`)
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g
     const parts = []
     let lastIndex = 0
     let match
 
-    // Find all code blocks
     while ((match = codeBlockRegex.exec(content)) !== null) {
-      // Add text before code block
       if (match.index > lastIndex) {
         parts.push(
           <span key={`text-${lastIndex}`} className="whitespace-pre-wrap">
@@ -209,15 +209,20 @@ export function ChatForm() {
         )
       }
 
-      // Add code block
       const language = match[1] || "text"
       const code = match[2]
-      parts.push(<CodeBlock key={`code-${match.index}`} language={language} value={code} />)
+      parts.push(
+        <CodeBlock
+          key={`code-${match.index}`}
+          language={language}
+          value={code}
+          showLineNumbers={settings.showCodeLineNumbers}
+        />,
+      )
 
       lastIndex = match.index + match[0].length
     }
 
-    // Add remaining text after last code block
     if (lastIndex < content.length) {
       parts.push(
         <span key={`text-${lastIndex}`} className="whitespace-pre-wrap">
@@ -226,7 +231,6 @@ export function ChatForm() {
       )
     }
 
-    // If no code blocks were found, return the content as is
     if (parts.length === 0) {
       return (
         <div className="relative group">
@@ -267,162 +271,228 @@ export function ChatForm() {
     )
   }
 
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    }).format(date)
+  }
+
+  const groupedSessions = useMemo(() => {
+    return sessions.reduce(
+      (groups, session) => {
+        const date = new Date(session.updatedAt)
+        const dateStr = formatDate(date)
+        if (!groups[dateStr]) {
+          groups[dateStr] = []
+        }
+        groups[dateStr].push(session)
+        return groups
+      },
+      {} as Record<string, typeof sessions>,
+    )
+  }, [sessions])
+
+  const sortedDates = useMemo(() => {
+    return Object.keys(groupedSessions).sort((a, b) => {
+      return new Date(b).getTime() - new Date(a).getTime()
+    })
+  }, [groupedSessions])
+
+  // Don't render until initialized to prevent hydration issues
+  if (!isInitialized) {
+    return (
+      <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-2xl mb-4 mx-auto">
+            M
+          </div>
+          <p>Loading Maxwell...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (currentView === "journal") {
     return (
-      <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 overflow-hidden">
-        {/* Sidebar */}
-        <div className="fixed inset-y-0 left-0 w-64 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col z-50 lg:relative">
-          {/* Navigation */}
-          <div className="p-2 space-y-1">
-            <Button onClick={() => setCurrentView("chat")} variant="ghost" className="w-full justify-start gap-2">
+      <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+        <div className="flex-1">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <Button variant="ghost" onClick={() => setCurrentView("chat")} className="flex items-center gap-2">
               <MessageSquare size={16} />
-              Chat
+              Back to Chat
             </Button>
-            <Button onClick={() => setCurrentView("journal")} variant="default" className="w-full justify-start gap-2">
-              <BookOpen size={16} />
-              Journal
-            </Button>
-          </div>
-
-          {/* User Menu */}
-          <div className="mt-auto border-t border-gray-200 dark:border-gray-700 p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
-                  M
-                </div>
-                <span className="text-sm font-medium">Maxwell</span>
-              </div>
-              <div className="flex items-center">
-                <ThemeToggle />
-                <SettingsDialog />
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={signOut}>
-                  <LogOut size={16} />
-                </Button>
-              </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <SettingsDialog />
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onSignOut}>
+                <LogOut size={16} />
+              </Button>
             </div>
           </div>
+          <JournalInterface />
         </div>
+      </div>
+    )
+  }
 
-        {/* Main Journal Area */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <JournalInterface userId={user?.id || ""} />
+  if (currentView === "second-brain") {
+    return (
+      <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+        <div className="flex-1">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <Button variant="ghost" onClick={() => setCurrentView("chat")} className="flex items-center gap-2">
+              <MessageSquare size={16} />
+              Back to Chat
+            </Button>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <SettingsDialog />
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onSignOut}>
+                <LogOut size={16} />
+              </Button>
+            </div>
+          </div>
+          <SecondBrainInterface />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 overflow-hidden">
-      {/* Mobile overlay */}
-      {mobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setMobileSidebarOpen(false)} />
-      )}
-
-      {/* Floating Toggle Button (when sidebar is closed) */}
-      {!sidebarOpen && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="fixed top-4 left-4 z-40 bg-white dark:bg-gray-800 shadow-md lg:block hidden"
-          onClick={() => setSidebarOpen(true)}
-        >
-          <Menu size={16} />
-        </Button>
-      )}
-
-      {/* Enhanced Session Sidebar with Tags */}
-      <SessionSidebar
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        isOpen={mobileSidebarOpen || sidebarOpen}
-        onClose={() => {
-          setMobileSidebarOpen(false)
-          setSidebarOpen(false)
-        }}
-        onNewSession={handleNewSession}
-        onSwitchSession={handleSwitchSession}
-        onDeleteSession={handleDeleteSession}
-        onUpdateTitle={updateSessionTitle}
-        onUpdateTags={updateSessionTags}
-        allTags={allTags}
-      />
-
-      {/* Main Chat Area */}
-      <div
-        className={cn(
-          "flex-1 flex flex-col h-full overflow-hidden transition-all duration-200",
-          !sidebarOpen && "lg:ml-0",
-        )}
-      >
-        {/* Top Bar with Insights */}
-        <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-          <div className="flex items-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 lg:hidden"
-              onClick={() => setMobileSidebarOpen(true)}
-            >
-              <MessageSquare size={16} />
+    <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <div className="w-64 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+          {/* Sidebar Header */}
+          <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Maxwell</h2>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setSidebarOpen(false)}>
+              <Menu size={16} />
             </Button>
-            <h1 className="text-lg font-medium ml-2">Maxwell</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <NotesButton userId={user?.id || ""} />
-            <InsightsButton userId={user?.id || ""} />
-            <ThemeToggle />
-            <SettingsDialog />
-          </div>
-        </div>
 
-        {/* Error Banner */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800/30 p-3">
-            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
-              <AlertCircle size={16} />
-              <span className="text-sm">{error}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setError(null)}
-                className="ml-auto h-6 w-6 p-0 text-red-700 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-              >
-                ×
-              </Button>
+          {/* New Chat Button */}
+          <div className="p-2">
+            <Button
+              onClick={handleNewSession}
+              className="w-full justify-start gap-2 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600"
+            >
+              <Plus size={16} />
+              New chat
+            </Button>
+          </div>
+
+          {/* Chat History */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-2 pb-2">
+              {sortedDates.map((dateStr) => (
+                <div key={dateStr} className="mb-4">
+                  <h3 className="px-3 mb-2 text-xs text-gray-500 dark:text-gray-400 font-medium">{dateStr}</h3>
+                  <div className="space-y-1">
+                    {groupedSessions[dateStr].map((session) => (
+                      <button
+                        key={session.id}
+                        onClick={() => handleSwitchSession(session.id)}
+                        className={cn(
+                          "w-full text-left px-3 py-2 rounded-md text-sm group flex items-center gap-2",
+                          session.id === currentSessionId
+                            ? "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                            : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300",
+                        )}
+                      >
+                        <MessageSquare size={14} className="flex-shrink-0" />
+                        <span className="truncate flex-1">{session.title}</span>
+                        {session.id === currentSessionId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                            onClick={(e) => handleDeleteSession(session.id, e)}
+                          >
+                            <Trash size={14} />
+                          </Button>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2">
+            {!sidebarOpen && (
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setSidebarOpen(true)}>
+                <Menu size={16} />
+              </Button>
+            )}
+            <h1 className="text-lg font-medium">Maxwell</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <BookOpen size={16} />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[80vh]">
+                <DialogHeader>
+                  <DialogTitle>Journal</DialogTitle>
+                </DialogHeader>
+                <div className="overflow-y-auto">
+                  <JournalInterface />
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Brain size={16} />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[80vh]">
+                <DialogHeader>
+                  <DialogTitle>Second Brain</DialogTitle>
+                </DialogHeader>
+                <div className="overflow-y-auto">
+                  <SecondBrainInterface />
+                </div>
+              </DialogContent>
+            </Dialog>
+            <ThemeToggle />
+            <SettingsDialog />
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onSignOut}>
+              <LogOut size={16} />
+            </Button>
+          </div>
+        </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center px-4 sm:px-8">
+            <div className="h-full flex flex-col items-center justify-center px-4 text-center">
               <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-2xl mb-6">
                 M
               </div>
-              <h1 className="text-3xl font-semibold text-center mb-6">How can I help you today?</h1>
-              <p className="text-gray-600 dark:text-gray-400 text-center max-w-md mb-8">{currentGreeting}</p>
-              <div className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-lg">
-                <p className="mb-2">I'm running in basic conversation mode. I can help with:</p>
-                <div className="grid grid-cols-2 gap-2 text-left">
-                  <div>• General questions</div>
-                  <div>• Problem solving</div>
-                  <div>• Creative writing</div>
-                  <div>• Learning assistance</div>
-                  <div>• Brainstorming</div>
-                  <div>• Research help</div>
-                </div>
-                <p className="mt-4 text-xs">For advanced features like tasks and notes, database setup is required.</p>
-              </div>
+              <h1 className="text-3xl font-semibold mb-4">How can I help you today?</h1>
+              <p className="text-gray-600 dark:text-gray-400 max-w-md">
+                I'm Maxwell, your personal AI assistant. I can help with coding, writing, analysis, and much more!
+              </p>
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto w-full px-4 py-6 sm:px-8" style={{ fontSize: `${settings.fontSize}px` }}>
+            <div className="max-w-3xl mx-auto w-full px-4 py-6" style={{ fontSize: `${settings.fontSize}px` }}>
               {messages.map((message, index) => (
-                <div key={index} className={cn("mb-6 last:mb-8", message.role === "user" ? "text-right" : "")}>
+                <div key={index} className={cn("mb-6", message.role === "user" ? "text-right" : "")}>
                   <div
                     className={cn(
-                      "inline-block max-w-[90%] sm:max-w-[80%] text-left",
+                      "inline-block max-w-[80%] text-left",
                       message.role === "user"
                         ? "bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-3"
                         : "bg-gray-100 dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3",
@@ -446,35 +516,47 @@ export function ChatForm() {
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 sm:p-4">
-          <div className="max-w-3xl mx-auto relative">
-            <form onSubmit={handleSubmit} className="relative">
-              <div className="flex items-center">
-                <FileUpload onFileUpload={handleFileUpload} className="mr-2" />
-                <div className="flex-1 relative">
-                  <AutoResizeTextarea
-                    onKeyDown={handleKeyDown}
-                    onChange={(v) => setInput(v)}
-                    value={input}
-                    disabled={isLoading}
-                    placeholder="Message Maxwell..."
-                    className="w-full resize-none border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent max-h-36 dark:bg-gray-800 dark:text-white"
-                    style={{ fontSize: `${settings.fontSize}px` }}
-                  />
-                  <Button
-                    type="submit"
-                    disabled={!input.trim() || isLoading}
-                    className="absolute right-2 bottom-2 h-8 w-8 p-0 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <ArrowUpIcon size={16} />
-                  </Button>
-                </div>
+        <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative">
+            <div className="relative flex items-end">
+              <div className="absolute left-3 bottom-3 flex items-center justify-center">
+                <FileUpload onFileUpload={handleFileUpload} />
               </div>
-            </form>
+              <AutoResizeTextarea
+                onKeyDown={handleKeyDown}
+                onChange={(v) => setInput(v)}
+                value={input}
+                disabled={isLoading}
+                placeholder="Message Maxwell..."
+                maxHeight={300}
+                className="w-full resize-none border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+                style={{ fontSize: `${settings.fontSize}px` }}
+              />
+              <Button
+                type="submit"
+                disabled={(!input.trim() && uploadedFiles.length === 0) || isLoading}
+                className="absolute right-2 bottom-2 h-8 w-8 p-0 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40"
+              >
+                <ArrowUpIcon size={16} />
+              </Button>
+            </div>
+            {uploadedFiles.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {uploadedFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-1 rounded-full flex items-center"
+                  >
+                    <Paperclip size={12} className="mr-1" />
+                    <span className="truncate max-w-[150px]">{file.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
               Maxwell can make mistakes. Consider checking important information.
             </p>
-          </div>
+          </form>
         </div>
       </div>
     </div>

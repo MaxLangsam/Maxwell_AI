@@ -3,129 +3,163 @@
 import type React from "react"
 
 import { useState, useRef } from "react"
-import { Paperclip, X, File, ImageIcon, FileText, Film, Music, Archive, Upload } from "lucide-react"
+import { Paperclip, X, File, ImageIcon, FileText, Film, Music, Archive } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { cn } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
 interface FileUploadProps {
-  onFileUpload: (file: File) => Promise<void>
-  className?: string
+  onFileUpload: (file: File) => void
 }
 
-export function FileUpload({ onFileUpload, className }: FileUploadProps) {
+interface UploadedFile {
+  id: string
+  file: File
+  progress: number
+  status: "uploading" | "complete" | "error"
+  previewUrl?: string
+}
+
+export function FileUpload({ onFileUpload }: FileUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0])
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    const fileId = `file-${Date.now()}`
+
+    // Create a preview URL for images
+    let previewUrl: string | undefined
+    if (file.type.startsWith("image/")) {
+      previewUrl = URL.createObjectURL(file)
     }
-  }
 
-  const handleUpload = async () => {
-    if (!selectedFile) return
-
-    setIsUploading(true)
-    setUploadProgress(0)
+    // Add file to uploaded files list
+    setUploadedFiles((prev) => [
+      ...prev,
+      {
+        id: fileId,
+        file,
+        progress: 0,
+        status: "uploading",
+        previewUrl,
+      },
+    ])
 
     // Simulate upload progress
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 95) {
-          clearInterval(interval)
-          return 95
-        }
-        return prev + 5
-      })
-    }, 100)
+    setIsUploading(true)
+    simulateUpload(fileId, file)
 
-    try {
-      await onFileUpload(selectedFile)
-      setUploadProgress(100)
-      setTimeout(() => {
-        setIsUploading(false)
-        setSelectedFile(null)
-        setUploadProgress(0)
-      }, 500)
-    } catch (error) {
-      console.error("Upload failed:", error)
-    } finally {
-      clearInterval(interval)
-    }
-  }
-
-  const cancelUpload = () => {
-    setSelectedFile(null)
-    setIsUploading(false)
-    setUploadProgress(0)
+    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
   }
 
+  const simulateUpload = (fileId: string, file: File) => {
+    let progress = 0
+    const interval = setInterval(() => {
+      progress += 10
+      setUploadedFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, progress } : f)))
+
+      if (progress >= 100) {
+        clearInterval(interval)
+        setUploadedFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "complete" } : f)))
+        setIsUploading(false)
+        onFileUpload(file)
+      }
+    }, 300)
+  }
+
+  const removeFile = (fileId: string) => {
+    setUploadedFiles((prev) => {
+      const updatedFiles = prev.filter((f) => f.id !== fileId)
+      // If no files are left, reset uploading state
+      if (updatedFiles.length === 0) {
+        setIsUploading(false)
+      }
+      return updatedFiles
+    })
+  }
+
   const getFileIcon = (file: File) => {
-    const type = file.type.split("/")[0]
-    switch (type) {
-      case "image":
-        return <ImageIcon size={16} />
-      case "video":
-        return <Film size={16} />
-      case "audio":
-        return <Music size={16} />
-      case "application":
-        if (file.type.includes("pdf")) return <FileText size={16} />
-        if (file.type.includes("zip") || file.type.includes("rar")) return <Archive size={16} />
-        return <File size={16} />
-      default:
-        return <File size={16} />
-    }
+    const type = file.type
+    if (type.startsWith("image/")) return <ImageIcon size={16} />
+    if (type.startsWith("text/")) return <FileText size={16} />
+    if (type.startsWith("video/")) return <Film size={16} />
+    if (type.startsWith("audio/")) return <Music size={16} />
+    if (type.includes("zip") || type.includes("compressed")) return <Archive size={16} />
+    return <File size={16} />
   }
 
   return (
-    <div className={cn("relative", className)}>
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        className="hidden"
-        accept="image/*,application/pdf,text/*,video/*,audio/*"
-      />
+    <TooltipProvider>
+      <div className="relative flex items-center justify-center">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          className="hidden"
+          accept="image/*,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        />
 
-      {!selectedFile ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Paperclip size={18} />
-        </Button>
-      ) : isUploading ? (
-        <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-md p-1 pr-2">
-          {getFileIcon(selectedFile)}
-          <div className="flex-1 max-w-[100px]">
-            <div className="text-xs truncate">{selectedFile.name}</div>
-            <Progress value={uploadProgress} className="h-1 w-full" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-full flex items-center justify-center"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+            >
+              <Paperclip size={16} />
+              <span className="sr-only">Attach file</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Attach file</TooltipContent>
+        </Tooltip>
+
+        {uploadedFiles.length > 0 && (
+          <div className="absolute bottom-full mb-2 left-0 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 p-2 space-y-2">
+            {uploadedFiles.map((uploadedFile) => (
+              <div key={uploadedFile.id} className="flex items-center gap-2">
+                <div className="flex-shrink-0 w-8 h-8">
+                  {uploadedFile.previewUrl ? (
+                    <img
+                      src={uploadedFile.previewUrl || "/placeholder.svg"}
+                      alt="Preview"
+                      className="w-8 h-8 object-cover rounded"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
+                      {getFileIcon(uploadedFile.file)}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs truncate">{uploadedFile.file.name}</p>
+                  {uploadedFile.status === "uploading" && (
+                    <Progress value={uploadedFile.progress} className="h-1 mt-1" />
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 rounded-full"
+                  onClick={() => removeFile(uploadedFile.id)}
+                >
+                  <X size={12} />
+                  <span className="sr-only">Remove file</span>
+                </Button>
+              </div>
+            ))}
           </div>
-          <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={cancelUpload}>
-            <X size={12} />
-          </Button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-md p-1 pr-2">
-          {getFileIcon(selectedFile)}
-          <div className="text-xs truncate max-w-[80px]">{selectedFile.name}</div>
-          <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={cancelUpload}>
-            <X size={12} />
-          </Button>
-          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-blue-500" onClick={handleUpload}>
-            <Upload size={12} />
-          </Button>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </TooltipProvider>
   )
 }

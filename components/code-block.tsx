@@ -1,65 +1,65 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { Check, Copy } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useSettings } from "@/hooks/use-settings"
+import { useState } from "react"
+import { Copy, Check } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface CodeBlockProps {
   language: string
   value: string
+  showLineNumbers?: boolean
 }
 
-export function CodeBlock({ language, value }: CodeBlockProps) {
-  const { settings } = useSettings()
+export function CodeBlock({ language, value, showLineNumbers = true }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
-  const preRef = useRef<HTMLPreElement>(null)
 
-  const handleCopy = async () => {
-    if (navigator.clipboard) {
+  const copyToClipboard = async () => {
+    try {
       await navigator.clipboard.writeText(value)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      console.error("Failed to copy code:", error)
     }
   }
 
-  // Apply syntax highlighting if enabled
-  useEffect(() => {
-    if (settings.codeSyntaxHighlighting && preRef.current) {
-      // In a real implementation, you would use a library like Prism.js or highlight.js
-      // For simplicity, we're just adding a class here
-      const codeElement = preRef.current.querySelector("code")
-      if (codeElement) {
-        codeElement.className = `language-${language}`
-      }
-    }
-  }, [language, settings.codeSyntaxHighlighting, value])
+  const lines = value.split("\n")
 
   return (
     <div className="relative group">
-      <pre
-        ref={preRef}
-        className={cn(
-          "p-4 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-x-auto",
-          settings.codeSyntaxHighlighting && "syntax-highlighted",
-        )}
-      >
-        <code className={`language-${language}`}>{value}</code>
-      </pre>
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={handleCopy}
-          className="p-1 rounded-md bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
-          aria-label="Copy code"
+      <div className="flex items-center justify-between bg-gray-800 dark:bg-gray-900 text-gray-200 px-4 py-2 rounded-t-lg">
+        <span className="text-sm font-medium">{language}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 text-gray-400 hover:text-gray-200"
+          onClick={copyToClipboard}
         >
-          {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-        </button>
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+        </Button>
       </div>
-      {language && (
-        <div className="absolute bottom-2 right-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
-          {language}
-        </div>
-      )}
+      <div className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-b-lg overflow-x-auto">
+        <pre className="text-sm">
+          <code>
+            {showLineNumbers ? (
+              <div className="flex">
+                <div className="select-none text-gray-500 pr-4 text-right min-w-[2rem]">
+                  {lines.map((_, index) => (
+                    <div key={index}>{index + 1}</div>
+                  ))}
+                </div>
+                <div className="flex-1">
+                  {lines.map((line, index) => (
+                    <div key={index}>{line}</div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              value
+            )}
+          </code>
+        </pre>
+      </div>
     </div>
   )
 }

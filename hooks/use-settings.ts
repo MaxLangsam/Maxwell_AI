@@ -2,55 +2,53 @@
 
 import { useState, useEffect } from "react"
 
-interface Settings {
-  language: string
-  codeSyntaxHighlighting: boolean
-  autoScrollToBottom: boolean
+export interface Settings {
+  theme: "light" | "dark" | "system"
   fontSize: number
-  soundEffects: boolean
-  desktopNotifications: boolean
-  soundVolume: number
+  autoScrollToBottom: boolean
+  showCodeLineNumbers: boolean
+  enableSyntaxHighlighting: boolean
+  soundEnabled: boolean
+  notificationsEnabled: boolean
+  language: string
 }
 
-const DEFAULT_SETTINGS: Settings = {
-  language: "en",
-  codeSyntaxHighlighting: true,
+const defaultSettings: Settings = {
+  theme: "system",
+  fontSize: 14,
   autoScrollToBottom: true,
-  fontSize: 16,
-  soundEffects: false,
-  desktopNotifications: false,
-  soundVolume: 50,
+  showCodeLineNumbers: true,
+  enableSyntaxHighlighting: true,
+  soundEnabled: true,
+  notificationsEnabled: true,
+  language: "en",
 }
-
-const LOCAL_STORAGE_KEY = "maxwell-settings"
 
 export function useSettings() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<Settings>(defaultSettings)
 
-  // Load settings from localStorage on mount
   useEffect(() => {
-    const savedSettings = localStorage.getItem(LOCAL_STORAGE_KEY)
+    const savedSettings = localStorage.getItem("maxwell-settings")
     if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings)
-        setSettings({ ...DEFAULT_SETTINGS, ...parsedSettings })
-      } catch (error) {
-        console.error("Error parsing saved settings:", error)
-      }
+      setSettings({ ...defaultSettings, ...JSON.parse(savedSettings) })
     }
   }, [])
 
-  // Save settings to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
+    localStorage.setItem("maxwell-settings", JSON.stringify(settings))
   }, [settings])
 
   const updateSettings = (newSettings: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }))
   }
 
+  const resetSettings = () => {
+    setSettings(defaultSettings)
+  }
+
   return {
     settings,
     updateSettings,
+    resetSettings,
   }
 }
