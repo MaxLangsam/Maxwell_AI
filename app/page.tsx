@@ -7,25 +7,38 @@ import { ErrorBoundary } from "@/components/error-boundary"
 
 export default function Page() {
   const [isSignedIn, setIsSignedIn] = useState(false)
+  const [authorizedEmail, setAuthorizedEmail] = useState("")
 
   // Check if user was previously signed in
   useEffect(() => {
     const savedAuthState = localStorage.getItem("maxwell-auth-state")
-    if (savedAuthState === "signed-in") {
+    const savedEmail = localStorage.getItem("maxwell-auth-email")
+
+    if (savedAuthState === "signed-in" && savedEmail === "maxlangsam534@gmail.com") {
       setIsSignedIn(true)
+      setAuthorizedEmail(savedEmail)
+    } else {
+      // Clear any invalid auth state
+      localStorage.removeItem("maxwell-auth-state")
+      localStorage.removeItem("maxwell-auth-email")
     }
   }, [])
 
   const handleSignIn = (email: string, password: string) => {
-    // In a real app, you would validate credentials with your backend
-    // For demo purposes, we'll just set the signed-in state
-    localStorage.setItem("maxwell-auth-state", "signed-in")
-    setIsSignedIn(true)
+    // Only allow the authorized email
+    if (email.toLowerCase() === "maxlangsam534@gmail.com") {
+      localStorage.setItem("maxwell-auth-state", "signed-in")
+      localStorage.setItem("maxwell-auth-email", email.toLowerCase())
+      setAuthorizedEmail(email.toLowerCase())
+      setIsSignedIn(true)
+    }
   }
 
   const handleSignOut = () => {
     localStorage.removeItem("maxwell-auth-state")
+    localStorage.removeItem("maxwell-auth-email")
     setIsSignedIn(false)
+    setAuthorizedEmail("")
   }
 
   return (

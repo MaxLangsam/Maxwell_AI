@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 interface SignInProps {
   onSignIn: (email: string, password: string) => void
@@ -24,6 +26,12 @@ export function SignIn({ onSignIn }: SignInProps) {
 
     if (!email || !password) {
       setError("Please enter both email and password")
+      return
+    }
+
+    // Check if the email is authorized
+    if (email.toLowerCase() !== "maxlangsam534@gmail.com") {
+      setError("Access denied. Please contact maxlangsam534@gmail.com to request access.")
       return
     }
 
@@ -79,7 +87,22 @@ export function SignIn({ onSignIn }: SignInProps) {
                 required
               />
             </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <Alert className="bg-yellow-50 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-yellow-200 dark:border-yellow-800">
+              <AlertDescription className="text-sm">
+                <strong>Testing Phase:</strong> Maxwell is currently in testing. To request access, please contact{" "}
+                <a href="mailto:maxlangsam534@gmail.com" className="font-medium underline">
+                  maxlangsam534@gmail.com
+                </a>
+                . Currently, only authorized users can sign in.
+              </AlertDescription>
+            </Alert>
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isLoading}>
