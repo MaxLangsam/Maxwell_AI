@@ -16,11 +16,11 @@ export default function Page() {
 
     if (savedAuthState === "signed-in" && savedEmail === "maxlangsam534@gmail.com") {
       setIsSignedIn(true)
-      setAuthorizedEmail(savedEmail)
     } else {
       // Clear any invalid auth state
       localStorage.removeItem("maxwell-auth-state")
       localStorage.removeItem("maxwell-auth-email")
+      setIsSignedIn(false)
     }
   }, [])
 
@@ -29,7 +29,6 @@ export default function Page() {
     if (email.toLowerCase() === "maxlangsam534@gmail.com") {
       localStorage.setItem("maxwell-auth-state", "signed-in")
       localStorage.setItem("maxwell-auth-email", email.toLowerCase())
-      setAuthorizedEmail(email.toLowerCase())
       setIsSignedIn(true)
     }
   }
@@ -38,7 +37,6 @@ export default function Page() {
     localStorage.removeItem("maxwell-auth-state")
     localStorage.removeItem("maxwell-auth-email")
     setIsSignedIn(false)
-    setAuthorizedEmail("")
   }
 
   return (

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Info } from "lucide-react"
 
 interface SignInProps {
   onSignIn: (email: string, password: string) => void
@@ -59,6 +59,21 @@ export function SignIn({ onSignIn }: SignInProps) {
           <CardTitle className="text-2xl font-bold text-center">Maxwell</CardTitle>
           <CardDescription className="text-center">Your personal AI assistant</CardDescription>
         </CardHeader>
+
+        {/* Testing Phase Disclaimer */}
+        <div className="px-6 pb-4">
+          <Alert className="bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200 border-amber-200 dark:border-amber-800">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              <strong>Testing Phase:</strong> Maxwell is currently in testing. To request access, please contact{" "}
+              <a href="mailto:maxlangsam534@gmail.com" className="font-medium underline hover:no-underline">
+                maxlangsam534@gmail.com
+              </a>
+              . Only authorized users can sign in at this time.
+            </AlertDescription>
+          </Alert>
+        </div>
+
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -93,16 +108,6 @@ export function SignIn({ onSignIn }: SignInProps) {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-
-            <Alert className="bg-yellow-50 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-yellow-200 dark:border-yellow-800">
-              <AlertDescription className="text-sm">
-                <strong>Testing Phase:</strong> Maxwell is currently in testing. To request access, please contact{" "}
-                <a href="mailto:maxlangsam534@gmail.com" className="font-medium underline">
-                  maxlangsam534@gmail.com
-                </a>
-                . Currently, only authorized users can sign in.
-              </AlertDescription>
-            </Alert>
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isLoading}>
