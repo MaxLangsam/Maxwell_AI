@@ -4,6 +4,8 @@
 
 Maxwell AI is a personalized conversational assistant designed to enhance productivity, support daily reflection, and intelligently manage information. Built using OpenAI’s language models and the ChatbotSDK, and deployed via Vercel’s v0.dev platform, Maxwell AI serves as a dynamic second brain—capable of remembering user inputs, generating contextual responses, and offering insights based on historical interactions.
 
+**CURRENTLY IN TESTING PHASE** (AS OF 5/31/2025)
+
 > 🔗 **Live App**: [Deployed on Vercel](https://maxwell-ai.vercel.app/)  
 ---
 
