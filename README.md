@@ -16,6 +16,7 @@ Maxwell AI is a personalized conversational assistant designed to enhance produc
 - OpenAI API key
 - Supabase project with anon/public API key
 - Git
+- Tailwind CSS
 
 ### Setup Steps
 
