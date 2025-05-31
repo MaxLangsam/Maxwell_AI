@@ -1,30 +1,117 @@
-# OpenAI and AI SDK Chatbot
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/max-langsams-projects/v0-open-ai-and-ai-sdk-chatbot)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/iHkb4iQEGEV)
+# Maxwell AI (Description)
 
-## Overview
+Maxwell AI is a personalized conversational assistant designed to enhance productivity, support daily reflection, and intelligently manage information. Built using OpenAI’s language models and the ChatbotSDK, and deployed via Vercel’s v0.dev platform, Maxwell AI serves as a dynamic second brain—capable of remembering user inputs, generating contextual responses, and offering insights based on historical interactions.
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+> 🔗 **Live App**: [Deployed on Vercel](https://maxwell-ai.vercel.app/)  
+---
 
-## Deployment
+## Installation Instructions
 
-Your project is live at:
+### Prerequisites
 
-**[https://vercel.com/max-langsams-projects/v0-open-ai-and-ai-sdk-chatbot](https://vercel.com/max-langsams-projects/v0-open-ai-and-ai-sdk-chatbot)**
+- Node.js (version 18 or higher)
+- pnpm (preferred package manager)
+- OpenAI API key
+- Supabase project with anon/public API key
+- Git
 
-## Build your app
+### Setup Steps
 
-Continue building your app on:
+1. **Clone the repository:**
 
-**[https://v0.dev/chat/projects/iHkb4iQEGEV](https://v0.dev/chat/projects/iHkb4iQEGEV)**
+```bash
+git clone https://github.com/yourusername/Maxwell_AI.git
+cd Maxwell_AI
+````
 
-## How It Works
+2. **Install dependencies:**
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+```bash
+pnpm install
+```
+
+3. **Configure environment variables:**
+
+Create a file named `.env.local` in the root directory and add the following:
+
+```env
+OPENAI_API_KEY=your_openai_key
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+4. **Start the development server:**
+
+```bash
+pnpm dev
+```
+
+---
+
+## Usage Guidelines
+
+Maxwell AI can be accessed via a browser-based chat interface. Users can interact naturally to manage tasks, journal reflections, and recall prior conversations.
+
+### Example Commands
+
+* “Remind me to call Alex at 4PM.”
+* “What did I say about travel last week?”
+* “Summarize my journal entries from the past 3 days.”
+
+The assistant supports both conversational and structured inputs, allowing for flexible use across planning, journaling, and reflection workflows.
+
+---
+
+## Features
+
+* 🧠 Long-term and session-based memory with user-controlled recall and deletion
+* 📓 Conversational journaling and summarization
+* ✅ Task and reminder tracking
+* 🔍 Insight surfacing and pattern recognition
+* 🔗 Integration with Supabase and OpenAI APIs
+* 🧩 Built using Next.js, TailwindCSS, and v0.dev deployment platform
+
+---
+
+## Contributing Guidelines
+
+To contribute to Maxwell AI:
+
+1. Fork the repository
+2. Create a feature branch:
+
+```bash
+git checkout -b feature/your-feature
+```
+
+3. Make your changes and commit:
+
+```bash
+git commit -m "Describe your feature"
+```
+
+4. Push to your fork:
+
+```bash
+git push origin feature/your-feature
+```
+
+5. Submit a pull request with a detailed explanation of your contribution.
+
+Please ensure that your code follows project conventions and includes relevant documentation or comments.
+
+---
+
+## License Information
+
+This project is licensed under the **MIT License**.
+You are free to use, modify, and distribute this software with appropriate attribution.
+
+---
+
+## Contact
+
+Maxwell AI is developed and maintained by **Max Langsam**.
+For inquiries, feedback, or collaboration, please reach out or submit an issue via the project repository.
